@@ -47,6 +47,10 @@ current launch picks them up immediately — you're chatting in the same run.
 Re-running `nep` later skips the wizard because the config is already there. You
 can edit `~/.env` by hand any time to change the endpoint.
 
+Run `nep --reset` to remove the saved base URL, API key, and model configuration
+and launch the first-run wizard again. Unrelated values in `~/.env` are left
+untouched. Named source configuration is also cleared so setup starts cleanly.
+
 The wizard only runs when stdin is a TTY, so headless/scripted invocations
 (piped input, CI) fall through to the `localhost:8080` default as before.
 
@@ -126,6 +130,7 @@ across switches (use `/reset` if you want a clean slate).
 
 | flag                          | what it does                                              |
 | ----------------------------- | -------------------------------------------------------- |
+| `--reset`                     | clear endpoint config and run first-run setup             |
 | `--yolo`                      | start in never-prompt mode (auto-approve everything)      |
 | `--approval <all\|low\|medium\|high\|yolo>` | start with a non-default approval mode       |
 | `--source <name>`             | start on a specific source                                |
