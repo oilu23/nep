@@ -2,25 +2,23 @@
 
 ![nep](nep.png)
 
+## About
+
 A single-file, single-dependency terminal coding agent — a fork/reimagining of
 Sentdex's [`minion`](https://github.com/Sentdex/minion), renamed to **nep**.
 
 The headline difference from minion: **nep runs on your system Python. No
-virtual environment required.** Just `pip install openai` (system-wide or with
-`--user`) and point it at any OpenAI-compatible endpoint. You *can* still run
-it inside a venv if you prefer; nep just doesn't assume one, create one, or
-require one.
+virtual environment required.** Point it at any OpenAI-compatible endpoint and
+start chatting with an agent that can read, write, edit, and run shell commands
+in your project. You can still use a virtual environment if you prefer; nep
+just doesn't require or create one.
 
-One Python file (`nep.py`), one `pip install openai`, no framework, no bloat.
-Point it at any OpenAI-compatible endpoint — a local llama.cpp / vLLM / SGLang
-server, or a remote API like Z.ai or OpenAI itself — and start chatting with an
-agent that can read, write, edit, and run shell commands in your project.
+nep works with local llama.cpp, vLLM, and SGLang servers, as well as remote
+services such as Z.ai, OpenAI, and OpenRouter.
 
-The whole thing is one file. No TUI framework, no plugin system, no config
-file format. It reads from environment variables (and `~/.env`), talks
-directly to the OpenAI SDK, and uses raw terminal escapes for its interface.
-If you want to understand or modify how it works, you read one file. That's
-the whole pitch.
+The implementation is one Python file (`nep.py`) with no TUI framework or
+plugin system. It reads environment variables and `~/.env`, talks directly to
+the OpenAI SDK, and uses raw terminal escapes for its interface.
 
 It's built to survive the rough edges of self-hosted and open models: if the
 server doesn't support native tool-calling, it falls back to parsing
@@ -28,6 +26,77 @@ server doesn't support native tool-calling, it falls back to parsing
 `reasoning_content` field (MiniMax-M3, DeepSeek-R1, etc.), it renders that as
 a dim "thinking" block above the answer. It degrades gracefully rather than
 demanding a perfect server.
+
+## Installation
+
+### Step 1: Check the prerequisites
+
+You need Git and Python 3.9 or newer:
+
+```bash
+git --version
+python3 --version
+```
+
+### Step 2: Clone the repository
+
+```bash
+git clone https://github.com/oilu23/nep.git
+cd nep
+```
+
+### Step 3: Run the installer
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+The installer installs nep into your Python user site and places the `nep`
+command in `~/.local/bin`. It handles PEP 668 externally managed Python
+installations and updates your shell PATH when needed.
+
+The install is editable, so changes made to `nep.py` in this checkout take
+effect without reinstalling. Re-running `./install.sh` safely refreshes the
+installation.
+
+### Step 4: Verify the command
+
+```bash
+command -v nep
+```
+
+If your current shell cannot find it immediately, reload your shell:
+
+```bash
+exec "$SHELL" -l
+command -v nep
+```
+
+### Step 5: Start nep
+
+Move to the project you want nep to work on, then launch it:
+
+```bash
+cd /path/to/your/project
+nep
+```
+
+On the first launch, nep asks for your base URL, API key, and model name.
+
+### Manual installation
+
+If you do not want to use the installer:
+
+```bash
+python3 -m pip install --user --break-system-packages -e .
+export PATH="$HOME/.local/bin:$PATH"
+nep
+```
+
+Add the PATH export to `~/.bashrc`, `~/.zshrc`, or your shell's equivalent to
+make it permanent. Use `python3 -m pip install .` instead of `-e .` for a
+non-editable installation.
 
 ## First-run setup
 
@@ -53,46 +122,6 @@ untouched. Named source configuration is also cleared so setup starts cleanly.
 
 The wizard only runs when stdin is a TTY, so headless/scripted invocations
 (piped input, CI) fall through to the `localhost:8080` default as before.
-
-## Quick start
-
-
-```
-pip install openai
-export NEP_BASE_URL=http://localhost:8080/v1
-export NEP_MODEL=your-model-name
-export NEP_API_KEY=sk-noop        # any string; local servers ignore it
-python nep.py
-```
-
-If `NEP_MODEL` is unset, nep asks the server what it's serving.
-
-## Install as a command
-
-If you'd rather have a `nep` command on your `$PATH`, install from this repo.
-The recommended way is the one-shot installer, which handles everything for
-you (PEP 668 externally-managed environments, PATH setup, no venv required):
-
-```
-./install.sh
-```
-
-That installs nep into your **system Python's user site** (`~/.local`), so the
-`nep` command lives at `~/.local/bin/nep` and works from any terminal. It's an
-editable install, so edits to `nep.py` in this checkout take effect
-immediately — no reinstall needed. Re-running `./install.sh` is safe and just
-refreshes the install.
-
-If you'd rather install manually, the one-liner equivalent is:
-
-```
-pip install --user --break-system-packages -e .
-```
-
-(and make sure `~/.local/bin` is on your `$PATH` — the installer does this for
-you; if you install manually you may need `export PATH="$HOME/.local/bin:$PATH"`
-in your `~/.bashrc`). Use `pip install .` (no `-e`) for a non-editable install
-instead.
 
 ## Configuration
 
