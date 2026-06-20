@@ -41,7 +41,7 @@ Sessions — every chat is auto-saved to ~/.nep/sessions/ and resumable:
   /save [title]                   # save the current session (title optional)
 
 Toggles in-session: /source [name]  /yolo  /approval [level]  /compress  /compact  /reset  /sessions  /resume  /save  /delete  /quit
-Flags: --yolo  --approval <all|low|medium|high|yolo>  --source <name>  --resume <target>  --session <id>
+Flags: --reset  --yolo  --approval <all|low|medium|high|yolo>  --source <name>  --resume <target>  --session <id>
 Env:   NEP_APPROVAL=<all|low|medium|high|yolo>  (persistent default approval mode; ~/.env or shell)
 """
 import json
@@ -583,6 +583,81 @@ def _has_nep_config_in_env_file(path=None):
     return any(k in text for k in keys)
 
 
+_RESET_CONFIG_KEYS = {
+    "NEP_BASE_URL",
+    "NEP_API_KEY",
+    "NEP_MODEL",
+    "NEP_SOURCES",
+    "NEP_ACTIVE",
+}
+
+
+def _is_endpoint_config_key(key):
+    """Whether an env key controls nep's endpoint, credentials, or model."""
+    return (
+        key in _RESET_CONFIG_KEYS
+        or (
+            key.startswith("NEP_SOURCE_")
+            and key.endswith(("_BASE_URL", "_API_KEY", "_MODEL"))
+        )
+    )
+
+
+def _env_assignment_key(line):
+    """Return the key assigned by an env-file line, ignoring comments."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        return None
+    if stripped.startswith("export "):
+        stripped = stripped[len("export "):].lstrip()
+    key = stripped.split("=", 1)[0].strip()
+    return key if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key) else None
+
+
+def _reset_endpoint_config():
+    """Remove saved/live endpoint config and restore the unconfigured source.
+
+    Unrelated ~/.env values are preserved. Named sources are cleared as well
+    as the legacy NEP_BASE_URL/API_KEY/MODEL keys; otherwise they would prevent
+    the first-run wizard from running.
+    """
+    try:
+        try:
+            with open(_ENV_FILE, encoding="utf-8") as f:
+                lines = f.readlines()
+        except FileNotFoundError:
+            lines = []
+
+        kept = []
+        for line in lines:
+            if line.strip() == "# --- nep config (added by first-run wizard) ---":
+                continue
+            key = _env_assignment_key(line)
+            if key and _is_endpoint_config_key(key):
+                continue
+            kept.append(line)
+
+        if kept != lines:
+            with open(_ENV_FILE, "w", encoding="utf-8") as f:
+                f.writelines(kept)
+    except OSError as e:
+        print(f"{RED}  ✗ couldn't reset {_ENV_FILE}: "
+              f"{type(e).__name__}: {e}{RESET}")
+        return False
+
+    for key in list(os.environ):
+        if _is_endpoint_config_key(key):
+            os.environ.pop(key, None)
+
+    # The original source objects may contain the old API key, so discard them
+    # immediately even if the user later cancels the setup wizard.
+    SOURCES.clear()
+    SOURCE_ORDER.clear()
+    _discover_sources()
+    _pick_start_source()
+    return True
+
+
 def _append_env_file(lines):
     """Append config lines to ~/.env, creating the file if needed.
 
@@ -627,18 +702,18 @@ def _prompt_default(prompt, default=None):
     return val
 
 
-def _first_run_wizard():
+def _first_run_wizard(force=False):
     """Interactive setup for first-time users. Prompts for base URL, API key,
     and model name, writes them to ~/.env, and re-discovers sources so the
     current run uses the new config. Skipped silently when config already
     exists or when stdin isn't a tty (so scripts / piped input still get the
     localhost fallback behavior).
     """
-    if not _is_first_run():
+    if not force and not _is_first_run():
         return
     # If ~/.env already has nep config, the user has been here before — don't
     # re-prompt. They may have cleared the live env vars on purpose.
-    if _has_nep_config_in_env_file():
+    if not force and _has_nep_config_in_env_file():
         return
     # Don't run the wizard when input isn't interactive (piped, redirected,
     # or headless). Fall through to the localhost default so scripts don't hang.
@@ -726,7 +801,12 @@ def _first_run_wizard():
     print()
 
 
-_first_run_wizard()
+_RESET_REQUESTED = "--reset" in sys.argv[1:]
+if _RESET_REQUESTED and _reset_endpoint_config():
+    print(f"{DIM}  reset endpoint configuration in {_ENV_FILE}{RESET}")
+    _first_run_wizard(force=True)
+else:
+    _first_run_wizard()
 
 
 # --- approval gating --------------------------------------------------------
