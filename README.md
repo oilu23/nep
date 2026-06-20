@@ -29,74 +29,43 @@ demanding a perfect server.
 
 ## Installation
 
-### Step 1: Check the prerequisites
+Requires Git and Python 3.9 or newer.
 
-You need Git and Python 3.9 or newer:
+### One-command install
 
 ```bash
-git --version
-python3 --version
+git clone https://github.com/oilu23/nep.git && cd nep && ./install.sh
 ```
 
-### Step 2: Clone the repository
+Then run `nep` from the project you want to work on.
+
+### Three-step install
+
+#### 1. Clone
 
 ```bash
 git clone https://github.com/oilu23/nep.git
 cd nep
 ```
 
-### Step 3: Run the installer
+#### 2. Install
 
 ```bash
-chmod +x install.sh
 ./install.sh
 ```
 
-The installer installs nep into your Python user site and places the `nep`
-command in `~/.local/bin`. It handles PEP 668 externally managed Python
-installations and updates your shell PATH when needed.
+#### 3. Run
 
-The install is editable, so changes made to `nep.py` in this checkout take
-effect without reinstalling. Re-running `./install.sh` safely refreshes the
-installation.
-
-### Step 4: Verify the command
-
-```bash
-command -v nep
-```
-
-If your current shell cannot find it immediately, reload your shell:
-
-```bash
-exec "$SHELL" -l
-command -v nep
-```
-
-### Step 5: Start nep
-
-Move to the project you want nep to work on, then launch it:
+Open the project you want nep to work on:
 
 ```bash
 cd /path/to/your/project
 nep
 ```
 
-On the first launch, nep asks for your base URL, API key, and model name.
-
-### Manual installation
-
-If you do not want to use the installer:
-
-```bash
-python3 -m pip install --user --break-system-packages -e .
-export PATH="$HOME/.local/bin:$PATH"
-nep
-```
-
-Add the PATH export to `~/.bashrc`, `~/.zshrc`, or your shell's equivalent to
-make it permanent. Use `python3 -m pip install .` instead of `-e .` for a
-non-editable installation.
+The installer handles dependencies, PEP 668 environments, and `~/.local/bin`
+PATH setup. If `nep` is not found in the current shell, run
+`exec "$SHELL" -l` once. The first launch opens the setup wizard.
 
 ## First-run setup
 
