@@ -40,7 +40,7 @@ Sessions — every chat is auto-saved to ~/.nep/sessions/ and resumable:
   /resume <n|short-id|title>      # switch to another session mid-chat
   /save [title]                   # save the current session (title optional)
 
-Toggles in-session: /source [name]  /yolo  /approval [level]  /compress  /compact  /reset  /sessions  /resume  /save  /delete  /quit
+Toggles in-session: /source [name]  /yolo  /approval [level]  /compress  /compact  /clear  /sessions  /resume  /save  /delete  /quit
 Flags: --reset  --yolo  --approval <all|low|medium|high|yolo>  --source <name>  --resume <target>  --session <id>
 Env:   NEP_APPROVAL=<all|low|medium|high|yolo>  (persistent default approval mode; ~/.env or shell)
 """
@@ -2558,7 +2558,7 @@ def main():
                     mark = f"{GREEN}★{RESET}" if sname == ACTIVE.name else f"{DIM} ·{RESET}"
                     m = src.display_model()
                     print(f"  {mark} {CYAN}{sname:<12}{RESET} {DIM}{m} @ {src.base_url}{RESET}")
-                print(f"{DIM}  /source <name> to switch · context preserved (use /reset to clear){RESET}")
+                print(f"{DIM}  /source <name> to switch · context preserved (use /clear to clear){RESET}")
             else:
                 target = sp[1]
                 if target not in SOURCES:
@@ -2603,7 +2603,7 @@ def main():
             else:
                 print(f"{YELLOW}  unknown level {arg!r} — want all|low|medium|high|yolo{RESET}")
             continue
-        if user == "/reset":
+        if user == "/clear":
             messages = [{"role": "system", "content": SYSTEM}]
             print(f"{DIM}  context cleared{RESET}")
             # A reset forks a new session id so the fresh chat isn't written
@@ -2948,7 +2948,7 @@ def _cmd_delete(target, current_id):
         print(f"{YELLOW}  ✗ no session matching {target!r}{RESET}")
         return
     if sid == current_id:
-        print(f"{YELLOW}  can't delete the session you're currently in — /reset first{RESET}")
+        print(f"{YELLOW}  can't delete the session you're currently in — /clear first{RESET}")
         return
     if _delete_session(sid):
         print(f"{DIM}  ✓ deleted session {sid}{RESET}")

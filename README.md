@@ -34,7 +34,7 @@ Requires Git and Python 3.9 or newer.
 ### One-command install
 
 ```bash
-git clone https://github.com/oilu23/nep.git && cd nep && ./install.sh
+git clone https://github.com/oilu23/nep.git && ./nep/install.sh
 ```
 
 Then run `nep` from the project you want to work on.
@@ -45,13 +45,12 @@ Then run `nep` from the project you want to work on.
 
 ```bash
 git clone https://github.com/oilu23/nep.git
-cd nep
 ```
 
 #### 2. Install
 
 ```bash
-./install.sh
+./nep/install.sh
 ```
 
 #### 3. Run
@@ -122,7 +121,7 @@ NEP_SOURCE_ZAI_MODEL=glm-x-preview
 
 See [`sources.example.env`](sources.example.env) for a full annotated example.
 Switch at runtime with `/source [name]`. The conversation context is preserved
-across switches (use `/reset` if you want a clean slate).
+across switches (use `/clear` if you want a clean slate).
 
 ### Flags
 
@@ -175,7 +174,7 @@ per-user settings live in one place instead of being exported every shell.
 | `/delete [target]`  | delete a saved session                                  |
 | `/compress`         | summarize older turns into one, keep last 2 verbatim     |
 | `/compact`          | alias for `/compress`                                    |
-| `/reset`            | clear conversation, start a fresh session               |
+| `/clear`            | clear conversation, start a fresh session               |
 | `/quit`             | exit                                                     |
 
 ## Input
@@ -274,7 +273,7 @@ source, cwd, timestamps). Files are plain JSON and human-readable/greppable.
 - A resumed session **reselects the source** (endpoint + model) it was started
   on, so it lands on the same backend it was talking to.
 - `/sessions <n>` shows the full transcript of a past session inline.
-- `/reset` starts a fresh session (it does not overwrite the old one).
+- `/clear` starts a fresh session (it does not overwrite the old one).
 
 ```
 $ nep sessions              # browse recent sessions, then exit
