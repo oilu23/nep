@@ -60,6 +60,17 @@ import time
 import httpx
 from openai import OpenAI, APIConnectionError, APIError
 
+# --- ANSI -------------------------------------------------------------------
+# Defined early (before the sources / first-run wizard) so import-time code
+# can colour its prompts. Just string constants — no dependencies.
+DIM, CYAN, GREEN, YELLOW, RED, MAGENTA, BOLD, RESET = (
+    "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m",
+    "\033[1m", "\033[0m",
+)
+CLEAR_LINE = "\033[2K\r"   # erase entire line, return cursor to col 0
+HIDE_CURSOR = "\033[?25l"
+SHOW_CURSOR = "\033[?25h"
+
 # --- env file ---------------------------------------------------------------
 # Load ~/.env (or NEP_ENV_FILE) into os.environ without clobbering vars
 # already set in the shell. Lets source config / API keys live in one place
@@ -495,17 +506,227 @@ def switch_source(name):
 
 _discover_sources()
 
-# Pick the starting source: --source flag, then NEP_ACTIVE env, then first.
-_start = None
-for _i, _arg in enumerate(sys.argv):
-    if _arg == "--source" and _i + 1 < len(sys.argv):
-        _start = sys.argv[_i + 1]
-        break
-_start = _start or os.environ.get("NEP_ACTIVE") or (SOURCE_ORDER[0] if SOURCE_ORDER else None)
-if not _start or _start not in SOURCES:
-    _start = SOURCE_ORDER[0] if SOURCE_ORDER else None
-if _start:
-    switch_source(_start)
+
+def _pick_start_source():
+    """Choose the active source at startup: --source flag, then NEP_ACTIVE env,
+    then the first defined source. Idempotent — safe to call again after a
+    re-discovery (e.g. once the first-run wizard has written config)."""
+    start = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--source" and i + 1 < len(sys.argv):
+            start = sys.argv[i + 1]
+            break
+    start = start or os.environ.get("NEP_ACTIVE") or (
+        SOURCE_ORDER[0] if SOURCE_ORDER else None)
+    if not start or start not in SOURCES:
+        start = SOURCE_ORDER[0] if SOURCE_ORDER else None
+    if start:
+        switch_source(start)
+
+
+_pick_start_source()
+
+
+# --- first-run config wizard ------------------------------------------------
+# When nep can't find any real endpoint config — no NEP_SOURCE_* vars, no
+# NEP_BASE_URL/NEP_API_KEY/NEP_MODEL in the shell or ~/.env — _discover_sources
+# silently falls back to a "local" source at localhost:8080 with a no-op key.
+# That's fine for someone who already runs a local server, but a first-time
+# user pointed at a remote API (Z.ai, OpenAI, OpenRouter, …) would see nep
+# try to connect to localhost and fail with a confusing error.
+#
+# So on first run (no saved config exists in ~/.env) we run a tiny interactive
+# wizard: ask for base URL, API key, and model name, write them into ~/.env as
+# the legacy NEP_BASE_URL / NEP_API_KEY / NEP_MODEL vars, re-discover sources,
+# and re-pick the start source — all before anything else in main() runs.
+
+def _is_first_run():
+    """True when no real endpoint config was found.
+
+    "Real" means a user explicitly set at least one of:
+      • a named NEP_SOURCE_*_BASE_URL
+      • NEP_SOURCES (with at least one entry)
+      • the legacy NEP_BASE_URL
+
+    If none are present, _discover_sources falls back to a synthetic "local"
+    source pointing at localhost:8080 with a sk-noop key — a default, not user
+    config. That's the condition we want to catch and prompt the user for.
+
+    Note: NEP_APPROVAL and other non-endpoint vars do NOT count as "configured".
+    We only care about endpoint connectivity.
+    """
+    if os.environ.get("NEP_SOURCES", "").strip():
+        return False
+    if os.environ.get("NEP_BASE_URL"):
+        return False
+    for k in os.environ:
+        if k.startswith("NEP_SOURCE_") and k.endswith("_BASE_URL"):
+            return False
+    return True
+
+
+def _has_nep_config_in_env_file(path=None):
+    """True when the env file (~/ .env) already contains nep endpoint config.
+
+    We don't parse — just grep for the relevant keys so a commented-out line
+    also counts as "present" (the user has been here before). That prevents the
+    wizard from re-firing for someone who configured things once and then
+    cleared the live env vars.
+    """
+    path = path or _ENV_FILE
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except (OSError, IOError):
+        return False
+    keys = ("NEP_BASE_URL", "NEP_SOURCE_", "NEP_SOURCES")
+    return any(k in text for k in keys)
+
+
+def _append_env_file(lines):
+    """Append config lines to ~/.env, creating the file if needed.
+
+    Writes a small header so the user knows where the lines came from, and
+    groups them under a comment. Idempotent-ish: we don't check for duplicates
+    here (the caller only runs this on a genuine first run).
+    """
+    path = _ENV_FILE
+    try:
+        existing = ""
+        try:
+            with open(path, encoding="utf-8") as f:
+                existing = f.read()
+        except (OSError, IOError):
+            pass
+        if not existing.endswith("\n") and existing:
+            existing += "\n"
+        block = "\n# --- nep config (added by first-run wizard) ---\n"
+        block += "\n".join(lines) + "\n"
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(existing + block)
+    except OSError as e:
+        print(f"{RED}  ✗ couldn't write {path}: {type(e).__name__}: {e}{RESET}")
+        print(f"{DIM}    Add these lines to {path} manually:{RESET}")
+        for line in lines:
+            print(f"{DIM}    {line}{RESET}")
+
+
+def _prompt_default(prompt, default=None):
+    """input() with an optional default shown in brackets. Empty return → default.
+    Returns '' (empty string) when there's no default and the user hit enter."""
+    if default:
+        shown = f"{prompt} {DIM}[{default}]{RESET} "
+    else:
+        shown = f"{prompt} "
+    try:
+        val = input(shown).strip()
+    except (EOFError, KeyboardInterrupt):
+        return None  # signal "user bailed"
+    if not val and default is not None:
+        return default
+    return val
+
+
+def _first_run_wizard():
+    """Interactive setup for first-time users. Prompts for base URL, API key,
+    and model name, writes them to ~/.env, and re-discovers sources so the
+    current run uses the new config. Skipped silently when config already
+    exists or when stdin isn't a tty (so scripts / piped input still get the
+    localhost fallback behavior).
+    """
+    if not _is_first_run():
+        return
+    # If ~/.env already has nep config, the user has been here before — don't
+    # re-prompt. They may have cleared the live env vars on purpose.
+    if _has_nep_config_in_env_file():
+        return
+    # Don't run the wizard when input isn't interactive (piped, redirected,
+    # or headless). Fall through to the localhost default so scripts don't hang.
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return
+
+    print()
+    print(f"{BOLD}  Welcome to nep!{RESET} {DIM}Let's get you set up.{RESET}")
+    print(f"{DIM}  nep talks to any OpenAI-compatible endpoint — a local")
+    print(f"  llama.cpp/vLLM server, or a remote API like Z.ai, OpenAI,")
+    print(f"  OpenRouter, etc. You only need to do this once.{RESET}")
+    print()
+
+    # --- base URL (required) -------------------------------------------------
+    print(f"{CYAN}  1/3  base URL{RESET} — the endpoint nep will talk to.")
+    print(f"{DIM}      Examples:")
+    print(f"        https://api.z.ai/api/paas/v4        (Z.ai)")
+    print(f"        https://api.openai.com/v1           (OpenAI)")
+    print(f"        https://openrouter.ai/api/v1        (OpenRouter)")
+    print(f"        http://localhost:8080/v1            (local llama.cpp){RESET}")
+    base_url = None
+    while base_url is None:
+        val = _prompt_default(f"{YELLOW}      base URL{RESET}",
+                              default="http://localhost:8080/v1")
+        if val is None:
+            print(f"\n{DIM}  cancelled — using localhost fallback.{RESET}")
+            return
+        if not val:
+            print(f"{RED}      ✗ base URL can't be empty.{RESET}")
+            continue
+        base_url = val.rstrip("/")
+    print()
+
+    # --- API key -------------------------------------------------------------
+    print(f"{CYAN}  2/3  API key{RESET}")
+    print(f"{DIM}      Paste your key. For a LOCAL server you can just hit Enter")
+    print(f"      (local servers ignore the key; nep defaults to 'sk-noop').{RESET}")
+    api_key = _prompt_default(f"{YELLOW}      API key{RESET}", default="sk-noop")
+    if api_key is None:
+        print(f"\n{DIM}  cancelled — using localhost fallback.{RESET}")
+        return
+    print()
+
+    # --- model name (optional) ----------------------------------------------
+    print(f"{CYAN}  3/3  model name{RESET}")
+    print(f"{DIM}      Which model to use. Hit Enter to auto-detect from the")
+    print(f"      server's /v1/models list (works for most local servers).{RESET}")
+    model = _prompt_default(f"{YELLOW}      model name{RESET}")
+    if model is None:
+        print(f"\n{DIM}  cancelled — using localhost fallback.{RESET}")
+        return
+
+    # --- persist to ~/.env ---------------------------------------------------
+    # Quote the values so spaces / special chars survive a future shell load.
+    def _q(v):
+        return f'"{v}"' if (" " in v or '"' in v or "'" in v or "$" in v) else v
+
+    lines = [
+        f"NEP_BASE_URL={_q(base_url)}",
+        f"NEP_API_KEY={_q(api_key)}",
+    ]
+    if model:
+        lines.append(f"NEP_MODEL={_q(model)}")
+    _append_env_file(lines)
+
+    # --- re-discover from the freshly-written config ------------------------
+    # Put the values into the live environment so _discover_sources picks them
+    # up (it reads os.environ, not the file directly). Then re-run discovery
+    # and re-pick the start source so the rest of this run uses the new config.
+    os.environ["NEP_BASE_URL"] = base_url
+    os.environ["NEP_API_KEY"] = api_key
+    if model:
+        os.environ["NEP_MODEL"] = model
+    SOURCES.clear()
+    SOURCE_ORDER.clear()
+    _discover_sources()
+    _pick_start_source()
+
+    print(f"{GREEN}  ✓ saved to {SESSION_HOME}'s sibling {os.path.basename(_ENV_FILE)}{RESET}")
+    src = ACTIVE
+    m = src.display_model() if src else "?"
+    url = src.base_url if src else "?"
+    print(f"{DIM}  using {m} @ {url}{RESET}")
+    print(f"{DIM}  (edit {os.path.basename(_ENV_FILE)} anytime to change it){RESET}")
+    print()
+
+
+_first_run_wizard()
 
 
 # --- approval gating --------------------------------------------------------
@@ -624,16 +845,6 @@ _llog = open(LOG_PATH, "a", buffering=1)  # line-buffered; flushes per write
 def _log_event(direction, payload):
     """direction: 'req' (outgoing) or 'resp' (incoming SSE chunk)."""
     _llog.write(json.dumps({"ts": time.time(), "dir": direction, "data": payload}) + "\n")
-
-# --- ANSI -------------------------------------------------------------------
-DIM, CYAN, GREEN, YELLOW, RED, MAGENTA, BOLD, RESET = (
-    "\033[2m", "\033[36m", "\033[32m", "\033[33m", "\033[31m", "\033[35m",
-    "\033[1m", "\033[0m",
-)
-CLEAR_LINE = "\033[2K\r"   # erase entire line, return cursor to col 0
-HIDE_CURSOR = "\033[?25l"
-SHOW_CURSOR = "\033[?25h"
-
 
 # --- waiting animation (tiny Conway's Game of Life) -------------------------
 # A spinner is boring. A 1-row toroidal Game of Life is the same shape on screen

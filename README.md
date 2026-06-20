@@ -29,7 +29,29 @@ server doesn't support native tool-calling, it falls back to parsing
 a dim "thinking" block above the answer. It degrades gracefully rather than
 demanding a perfect server.
 
+## First-run setup
+
+If you haven't configured an endpoint yet (no `NEP_BASE_URL` / `NEP_SOURCE_*` in
+your shell or `~/.env`), nep detects that and runs a short interactive wizard on
+first launch. It asks for:
+
+1. **Base URL** — the endpoint to talk to (e.g. `https://api.z.ai/api/paas/v4`,
+   `https://api.openai.com/v1`, `http://localhost:8080/v1`). Defaults to the
+   local llama.cpp port.
+2. **API key** — your key; defaults to `sk-noop` (local servers ignore it).
+3. **Model name** — which model to use; hit Enter to auto-detect from the
+   server's `/v1/models` list.
+
+The answers are written to `~/.env` (so they persist across runs) and the
+current launch picks them up immediately — you're chatting in the same run.
+Re-running `nep` later skips the wizard because the config is already there. You
+can edit `~/.env` by hand any time to change the endpoint.
+
+The wizard only runs when stdin is a TTY, so headless/scripted invocations
+(piped input, CI) fall through to the `localhost:8080` default as before.
+
 ## Quick start
+
 
 ```
 pip install openai

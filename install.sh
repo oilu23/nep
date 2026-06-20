@@ -155,10 +155,9 @@ nep sessions || true
 
 echo
 echo "Done. 'nep' is installed. Next:"
-echo "  1. put your endpoint in ~/.env  (see sources.example.env):"
-echo "         NEP_BASE_URL=https://openrouter.ai/api/v1"
-echo "         NEP_API_KEY=sk-or-v1-..."
-echo "         NEP_MODEL=z-ai/glm-5.2"
+echo "  1. just run 'nep' — on first run it'll prompt you for your endpoint"
+echo "     (base URL, API key, model name) and save the config to ~/.env."
+echo "         (or set them by hand in ~/.env — see sources.example.env)"
 echo "  2. run 'nep' from any directory."
 echo
 echo "If 'nep' isn't found in a NEW terminal, run 'source ~/.bashrc'"
