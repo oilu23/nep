@@ -34,7 +34,7 @@ Requires Git and Python 3.9 or newer.
 ### One-command install
 
 ```bash
-git clone https://github.com/oilu23/nep.git && cd nep && ./install.sh
+git clone https://github.com/oilu23/nep.git && ./nep/install.sh
 ```
 
 Then run `nep` from the project you want to work on.
@@ -45,13 +45,12 @@ Then run `nep` from the project you want to work on.
 
 ```bash
 git clone https://github.com/oilu23/nep.git
-cd nep
 ```
 
 #### 2. Install
 
 ```bash
-./install.sh
+./nep/install.sh
 ```
 
 #### 3. Run
